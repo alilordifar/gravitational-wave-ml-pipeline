@@ -1,86 +1,72 @@
-# Gravitational Waves Detection
+# 🔭 LIGO & Signal Processing — Study Notes
+
+## Table of Contents
+
+- [🌌 What is LIGO?](#-what-is-ligo)
+- [📁 HDF5 Data Format](#-hdf5-data-format)
+- [🗂️ Filename Decoder](#️-filename-decoder)
+- [⏱️ Sample Rate & Time Conversion](#️-sample-rate--time-conversion)
+- [📐 Min-Max Normalization](#-min-max-normalization)
+- [📐 Z-score Standardization](#-z-score-standardization)
+- [⚖️ Min-Max vs. Standardization](#️-min-max-vs-standardization)
+- [📊 The Gaussian Rules](#-the-gaussian-rules)
+- [🔍 Deep Intuition — Std & Z-scores](#-deep-intuition--std--z-scores)
+
+---
+
 ## 🌌 What is LIGO?
 
-**LIGO (Laser Interferometer Gravitational-Wave Observatory)** is a large-scale physics experiment designed to detect **gravitational waves**—tiny ripples in spacetime predicted by Albert Einstein in 1916.
+**LIGO (Laser Interferometer Gravitational-Wave Observatory)** is a large-scale physics experiment designed to detect **gravitational waves** — tiny ripples in spacetime first predicted by Albert Einstein in 1916.
+
+- Uses **laser interferometry** to measure distance changes smaller than 1/10,000 the size of a proton
+- Detects waves from events like black hole mergers and neutron star collisions
+
+### Brief History
+
+| Year | Event |
+|------|-------|
+| 1916 | Gravitational waves predicted — Einstein |
+| 1970s–80s | Concept developed — Rainer Weiss & others |
+| 1990s | Construction begins — funded by NSF |
+| 2015 | First detection — **GW150914** |
+| 2017 | Nobel Prize awarded |
+
+### The Two Detectors
+
+| Detector | Location | Notes |
+|----------|----------|-------|
+| **H1** | Hanford, Washington | Relatively stable — less environmental noise |
+| **L1** | Livingston, Louisiana | More seismic and environmental noise |
+
+**Structure (both sites):**
+- Two **perpendicular arms (4 km each)**
+- Laser beams travel inside vacuum tubes
+- A gravitational wave causes a tiny stretch/compression → detected as a signal
+
+**Why two detectors?**
+- Confirm signals are **real** (not noise)
+- Measure the **time delay between sites**
+- Help **locate the source** in the sky
+
+> **One-line summary:** LIGO = two 4 km laser interferometers measuring tiny spacetime distortions from cosmic events.
 
 ---
 
-## 🧠 Definition (Core Idea)
+## 📁 HDF5 Data Format
 
-- Uses **laser interferometry** to measure extremely small changes in distance  
-- Detects waves from:
-  - black hole mergers  
-  - neutron star collisions  
-- Sensitivity: ~1/10,000 the size of a proton  
+HDF5 is a **container file**, not a flat table. Think of it like a filesystem inside a single file:
 
----
-
-## 🕰️ Brief History
-
-- **1916** → Gravitational waves predicted (Einstein)  
-- **1970s–80s** → Concept developed (Rainer Weiss and others)  
-- **1990s** → Construction begins (funded by NSF)  
-- **2015** → First detection (GW150914)  
-- **2017** → Nobel Prize awarded  
-
----
-
-## 📍 Detectors
-
-### 🔹 H1 — Hanford
-
-- Location: Washington, USA  
-- Name: **H1**  
-- Environment: relatively stable, less environmental noise  
-
----
-
-### 🔹 L1 — Livingston
-
-- Location: Louisiana, USA  
-- Name: **L1**  
-- Environment: more seismic and environmental noise  
-
----
-
-## ⚙️ Structure (Both H1 & L1)
-
-- Two **perpendicular arms (4 km each)**  
-- Laser beams travel inside vacuum tubes  
-- Gravitational wave → tiny stretch/compression → detected as signal  
-
----
-
-## 🎯 Why Two Detectors?
-
-- Confirm signals are **real (not noise)**  
-- Measure **time delay between sites**  
-- Help **locate source in the sky**  
-
----
-
-## 🧩 One-Line Summary
-
-**LIGO = two 4 km laser interferometers measuring tiny spacetime distortions from cosmic events**
-
----
-## LIGO Data
-### What is an HDF5 file?
-- HDF5 = a container file, not a flat table.
-
-Think of it like:
-- A filesystem inside a single file
-
-Just like a disk has folders and files, an HDF5 file has:
-- Groups → like folders
-- Datasets → like files (arrays, tables, numbers)
-- Attributes → metadata (key–value info)
+| HDF5 Concept | Analogy |
+|--------------|---------|
+| Groups | Folders |
+| Datasets | Files — arrays, numbers |
+| Attributes | Metadata — key–value pairs |
 
 ```
 myfile.hdf5
 │
 ├── /strain
-│    └── strain           ← 1D NumPy-like array (the signal)
+│    └── strain           ← 1D array (the signal)
 │
 ├── /meta
 │    ├── detector         ← "H1" or "L1"
@@ -91,159 +77,291 @@ myfile.hdf5
      └── data_flags
 ```
 
-### Why LIGO uses HDF5
-Because LIGO data is:
-1. Huge
-2. Hierarchical
-3. Mixed data types
-4. Needs metadata tightly coupled to the signal
-5. CSV or Parquet would be a bad fit.
+### What's Inside
 
-### What’s inside a LIGO HDF5 (practically)
-
-You will almost always find:
-
-1️⃣ Strain (the main thing)
-
-- A 1D array
-- Length = sample_rate × duration
+**① Strain** — the main signal
+- A 1D array of length `sample_rate × duration`
 - This is what you plot, filter, and model
 
-2️⃣ Metadata
+**② Metadata**
+- Sample rate, GPS time, detector name, units
 
-- Sample rate
-- GPS time
-- Detector name (H1 / L1)
-- Units
+**③ Quality flags** *(sometimes)*
+- Marks bad segments, glitches, and missing data
 
-3️⃣ Quality flags (sometimes)
+**Why not CSV or Parquet?**
+LIGO data is huge, hierarchical, mixed-type, and needs metadata tightly coupled to the signal — flat formats can't handle that.
 
-- Marks bad segments
-- Glitches
-- Missing data
+> **One-line intuition:** An HDF5 file is a mini data lake — signal + metadata + structure, all in one file.
 
-### One-sentence intuition (lock this in)
+### File Size Calculation
 
-**An HDF5 file is a mini data lake: signal + metadata + structure, all in one file.**
+```python
+N              = len(strain)          # number of samples
+bytes_per_item = strain.itemsize      # e.g. 8 bytes for float64
+total_bytes    = N * bytes_per_item
+size_in_mb     = total_bytes / 1024**2
+```
 
-----
-### LIGO filenames are very informative. Let’s decode them piece by piece.
-`
+Memory is measured in powers of 2 because computers use binary:
+`1 KB = 1024 B`, `1 MB = 2²⁰ B`, `1 GB = 2³⁰ B`.
+
+---
+
+## 🗂️ Filename Decoder
+
+```
 <Observatory>-<Detector>_<Source>_<SampleRate>_<Release>-<GPS_START>-<DURATION>.hdf5
-`
+```
 
-| Part         | Meaning                                |
-| ------------ | -------------------------------------- |
-| `H`          | Hanford observatory                    |
-| `H1`         | Hanford detector (interferometer)      |
-| `L`          | Livingstone observatory                    |
-| `L1`         | Livingstone detector (interferometer)      |
-| `GWOSC`      | Gravitational Wave Open Science Center |
-| `4KHZ`       | Sampling rate = **4096 Hz**            |
-| `R1`         | Data release version                   |
-| `1264316101` | GPS start time (seconds)               |
-| `32`         | Duration = **32 seconds**              |
-| `.hdf5`      | File format                            |
-
----
-## Sample Rate
-LIGO data is a 1D time-series of strain measurements. A sample is one measurement taken at a specific instant. The sampling rate (e.g., 4096 Hz) means the detector records 4096 samples every second. Time is implicit: sample index × (1 / sampling rate). The duration of a file is total samples ÷ sampling rate (e.g., 131,072 ÷ 4096 = 32 s). Higher sampling rate gives finer time resolution, not longer duration.
+| Part | Meaning |
+|------|---------|
+| `H` | Hanford observatory |
+| `H1` | Hanford detector (interferometer) |
+| `L` | Livingston observatory |
+| `L1` | Livingston detector (interferometer) |
+| `GWOSC` | Gravitational Wave Open Science Center |
+| `4KHZ` | Sampling rate = **4096 Hz** |
+| `R1` | Data release version |
+| `1264316101` | GPS start time (seconds) |
+| `32` | Duration = **32 seconds** |
+| `.hdf5` | File format |
 
 ---
 
-### Here’s how size is calculated in that code, step by step, briefly:
-1. N = len(strain) → Counts how many samples are in strain.
-2. strain.itemsize → Size of one element in bytes (e.g., 8 bytes for a float64).
-3. N * strain.itemsize → Total bytes used by all samples.
-4. 1024**2 → Converts bytes to megabytes (MB).
+## ⏱️ Sample Rate & Time Conversion
 
-Computers represent data in binary (base-2), so memory sizes are counted in powers of 2, not powers of 10. One byte equals 8 bits. The closest power of 2 to 1000 is 2¹⁰ = 1024, so 1 KB = 1024 bytes. Each larger unit adds another factor of 1024: 1 MB = 2²⁰ bytes, 1 GB = 2³⁰ bytes. This convention aligns memory measurement with how computers actually store and address data.
+LIGO data is a 1D time-series of strain measurements.
 
----
+- A **sample** is one measurement taken at a specific instant
+- `fs = 4096 Hz` means **4096 samples recorded every second**
+- Time is implicit: `sample_index × (1 / fs)`
+- Duration = `total_samples ÷ sample_rate` → e.g. `131072 ÷ 4096 = 32 s`
 
-`total_time = total_samples ÷ samples_per_second`
+> Higher sampling rate = finer time resolution — **not** longer duration.
 
-`131072 ÷ 4096 = 32 seconds`
+### Rule 1 — Time → Sample Index (multiply)
 
----
+$$\text{sample\_index} = \text{time} \times f_s$$
 
-#### The real difference np.linspace and np.arange:
+```
+1 second   →  1  × 4096 = 4096
+10 seconds →  10 × 4096 = 40960
+```
 
-**np.linspace(start, stop, N):**
-→ exactly N evenly spaced points (step is computed)
-`np.linspace(0, 1, 4)`
-`[0.00, 0.33, 0.67, 1.00]  ← evenly spaced, not random`
+> *"How many samples have occurred by this time?"*
 
+### Rule 2 — Sample Index → Time (divide)
 
-**np.arange(start, stop, step):**
-→ exact step size, number of points depends on it
-`np.arange(0, 1, 0.25)`
-`[0.00, 0.25, 0.50, 0.75]`
+$$\text{time} = \frac{\text{sample\_index}}{f_s}$$
 
----
+```
+sample 4096  →  4096 ÷ 4096 = 1.0 second
+sample 2048  →  2048 ÷ 4096 = 0.5 seconds
+```
 
-# Time ↔ Sample Index Conversion (Clean Intuition)
+> *"How many seconds does this many samples represent?"*
 
-## Core idea
-LIGO data is stored as **samples**, not time.  
-The **sampling rate (`fs`)** tells us how many samples are taken per second.
+### When to Use Each
 
----
+| Operation | Direction | Rule |
+|-----------|-----------|------|
+| Zoom / slice the signal | time → samples | **Multiply** |
+| Label the x-axis in a plot | samples → time | **Divide** |
 
-## What is sampling rate?
-- `fs = 4096 Hz`  
-- Meaning: **4096 samples every 1 second**
+### `np.linspace` vs `np.arange`
 
----
+| | `np.linspace(start, stop, N)` | `np.arange(start, stop, step)` |
+|---|-------------------------------|-------------------------------|
+| **Controls** | Number of points | Step size |
+| **Output** | Exactly N evenly spaced points | As many as step allows |
+| **Example** | `[0.00, 0.33, 0.67, 1.00]` | `[0.00, 0.25, 0.50, 0.75]` |
 
-## Two conversion rules (memorize these)
-
-### 1️⃣ Time → Sample index (MULTIPLY)
-Use this when you want to know **which sample corresponds to a time**.
-
-**Formula:**
-sample_index = time_in_seconds × fs
+> **One-line takeaway:** Multiply to go from time to samples. Divide to go from samples to time.
 
 ---
 
-**Example:**
-- 1 second → `1 × 4096 = 4096`
-- 10 seconds → `10 × 4096 = 40960`
+## 📐 Min-Max Normalization
 
-Interpretation:  
-> How many samples have occurred by this time?
+Converts all values into the range **[0, 1]**. The smallest becomes 0, the largest becomes 1.
+
+### Formula
+
+$$x' = \frac{x - x_{\min}}{x_{\max} - x_{\min}}$$
+
+| Part | What it measures |
+|------|-----------------|
+| $x - x_{\min}$ (numerator) | Distance from the minimum |
+| $x_{\max} - x_{\min}$ (denominator) | Total possible distance — the full range |
+| Result | *"What fraction of the full range have we covered?"* |
+
+### Worked Example
+
+```
+data = [10, 20, 30]
+x_min = 10,   x_max = 30,   range = 20
+```
+
+| Original | Calculation | Normalized |
+|----------|-------------|------------|
+| 10 | (10 − 10) / 20 | **0.0** |
+| 20 | (20 − 10) / 20 | **0.5** ← halfway |
+| 30 | (30 − 10) / 20 | **1.0** |
+
+> ⚠️ **Sensitive to outliers.** A single value like `1000` in `[10, 20, 30, 1000]` stretches the scale — everything else collapses toward `0`.
+
+### Python
+
+```python
+x_min = np.min(strain1)
+x_max = np.max(strain1)
+
+strain_minmax = (strain1 - x_min) / (x_max - x_min)
+```
 
 ---
 
-### 2️⃣ Sample index → Time (DIVIDE)
-Use this when you want to know **what time a sample represents**.
+## 📐 Z-score Standardization
 
-**Formula:**
-time_in_seconds = sample_index ÷ fs
+Instead of fixing values to a range, standardization asks: *how unusual is this value compared to normal behavior?*
 
+### Formula
 
-**Example:**
-- sample 4096 → `4096 ÷ 4096 = 1 second`
-- sample 2048 → `2048 ÷ 4096 = 0.5 seconds`
+$$z = \frac{x - \mu}{\sigma}$$
 
-Interpretation:  
-> How many seconds does this many samples represent?
+| Part | What it measures |
+|------|-----------------|
+| $x - \mu$ (numerator) | How far from average? |
+| $\sigma$ (denominator) | What is a typical movement size? |
+| Result | *"How many normal-sized jumps away from average?"* |
+
+### Worked Example
+
+```
+data = [10, 12, 14]
+μ = 12,   σ ≈ 2
+```
+
+| Original | Calculation | z-score | Meaning |
+|----------|-------------|---------|---------|
+| 10 | (10 − 12) / 2 | **−1** | 1 std dev below mean |
+| 12 | (12 − 12) / 2 | **0** | exactly at the mean |
+| 14 | (14 − 12) / 2 | **+1** | 1 std dev above mean |
+
+### Std is NOT a Maximum
+
+Std is **one normal-sized step** — not a ceiling. Z-scores are unbounded:
+
+```
+z = 1    →  normal
+z = 3    →  unusual
+z = 10   →  very rare
+z = 100  →  extreme outlier
+```
+
+### LIGO Example
+
+```
+Hanford:  μ ≈ 0,   σ ≈ 4.6e-20
+
+x = 5e-20  →  z ≈ 1.09   (normal noise — not unusual)
+x = 2e-19  →  z ≈ 4.35   (worth investigating!)
+```
+
+### Python
+
+```python
+mean = np.mean(strain1)
+std  = np.std(strain1)
+
+strain_standardized = (strain1 - mean) / std
+```
 
 ---
 
-## Why both are needed
-- **Multiply** → choose where to zoom or slice
-- **Divide** → label the x-axis in plots
+## ⚖️ Min-Max vs. Standardization
+
+| | Min-Max | Standardization |
+|---|---------|-----------------|
+| **Formula** | $\dfrac{x - x_{\min}}{x_{\max} - x_{\min}}$ | $\dfrac{x - \mu}{\sigma}$ |
+| **Denominator means** | Full range | One typical jump (σ) |
+| **Output range** | Always `[0, 1]` | Unbounded, centered at 0 |
+| **Has a maximum?** | ✅ Yes — always 1 | ❌ No — unbounded |
+| **Sensitive to outliers?** | ✅ Yes | ❌ Less so |
+| **Core question** | *"Where are we between min and max?"* | *"How unusual is this?"* |
+| **Best for** | Fixed-scale inputs (e.g. neural nets) | Anomaly detection in signals |
+
+> **For LIGO:** standardization wins — we care about detecting unusual values vs. normal noise, not fitting a `[0, 1]` scale.
 
 ---
 
-## Analogy (video frames)
-- Frames per second (FPS) ≈ samples per second (fs)
-- Time → frame number → multiply
-- Frame number → time → divide
+## 📊 The Gaussian Rules
+
+For a **Normal (Gaussian)** distribution, std tells you the *"typical spread"* of your data.
+
+| Range | Coverage | Plain English |
+|-------|----------|---------------|
+| $\mu \pm 1\sigma$ | **~68%** of values | most values live here |
+| $\mu \pm 2\sigma$ | **~95%** of values | almost all values live here |
+| $\mu \pm 3\sigma$ | **~99.7%** of values | nearly everything lives here |
+
+### Worked Example — `mean = 100`, `std = 5`
+
+```
+1σ range:   100 ± 5   =  [95,  105]   →  ~68%   of values
+2σ range:   100 ± 10  =  [90,  110]   →  ~95%   of values
+3σ range:   100 ± 15  =  [85,  115]   →  ~99.7% of values
+```
+
+> ⚠️ `100 ± 5` captures **~68%** of values — not 95%, not all of them.
+
+**Key intuitions:**
+- Std = the **"typical jump size"** away from the mean
+- Most data stays within **a few stds** of the mean
+- Values many stds away are **rare and unusual**
+
+> This holds when data is roughly **Gaussian and centered around the mean**.
 
 ---
 
-## One-line takeaway
-**Multiply to go from time to samples.  
-Divide to go from samples to time.**
+## 🔍 Deep Intuition — Std & Z-scores
+
+### Why We Divide by σ
+
+$$z = \frac{x - \mu}{\sigma} = \frac{\text{distance from average}}{\text{size of one typical jump}}$$
+
+**Step 1 — subtract the mean:** $x - \mu$
+Centers the data at zero. *"How far is this value from average?"*
+
+**Step 2 — divide by std:** $\frac{x - \mu}{\sigma}$
+*"How large is that distance compared to a typical movement?"*
+
+### Worked Example
+
+```
+mean = 100,   std = 5,   value = 115
+
+distance from mean:  115 - 100 = 15
+typical jump size:   5
+
+z = 15 / 5 = 3  →  3 typical jumps away (unusual)
+```
+
+### Interpreting Z-scores
+
+| z-score | Meaning | Rarity |
+|---------|---------|--------|
+| `0` | Exactly at the mean | Typical |
+| `±1` | One typical jump away | Common (~68%) |
+| `±2` | Two typical jumps away | Less common (~95%) |
+| `±3` | Three typical jumps away | Rare (~99.7%) |
+| `≥ 4` | Far from normal | **Potentially interesting** |
+
+### One-Line Intuitions
+
+```
+Min-Max:          "relative position in the range"
+Standardization:  "how many typical jumps from average"
+```
+
+> For LIGO: a z-score of `4.35` immediately signals *this is unusual* — far more informative than a min-max value of `0.003`.
