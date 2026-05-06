@@ -142,7 +142,7 @@ LIGO data is a 1D time-series of strain measurements.
 
 ### Rule 1 — Time → Sample Index (multiply)
 
-$$\text{sample\_index} = \text{time} \times f_s$$
+$$\text{sample\\_index} = \text{time} \times f_s$$
 
 ```
 1 second   →  1  × 4096 = 4096
@@ -153,7 +153,7 @@ $$\text{sample\_index} = \text{time} \times f_s$$
 
 ### Rule 2 — Sample Index → Time (divide)
 
-$$\text{time} = \frac{\text{sample\_index}}{f_s}$$
+$$\text{time} = \frac{\text{sample\\_index}}{f_s}$$
 
 ```
 sample 4096  →  4096 ÷ 4096 = 1.0 second
