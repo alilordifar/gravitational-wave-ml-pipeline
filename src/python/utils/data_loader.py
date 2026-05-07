@@ -15,14 +15,46 @@ def load_hdf5_strain(file_path: str) -> np.ndarray:
     try:
         with h5py.File(file_path, "r") as f:
             ds = f["strain"]["Strain"]
-            # HDF5 reports sizes in bytes. Convert to MB for logging.
-            size_mb = (ds.size * ds.dtype.itemsize) / 1024**2 # Bytes to KB to MB: divide by 1024 twice
-            logger.info(f"Dataset shape: {ds.shape}  (~{size_mb:.2f} MB)")
+            size_mb = (ds.size * ds.dtype.itemsize) / 1024**2
+            shape, dtype = ds.shape, ds.dtype
             strain = ds[:]
     except Exception as e:
         logger.error(f"Error reading {file_path}: {e}")
         raise
 
+    rows = [
+        ("File",      str(file_path)),
+        ("Shape",     str(shape)),
+        ("dtype",     str(dtype)),
+        ("Size",      f"{size_mb:.2f} MB"),
+        ("---",       ""),
+        ("Min",       f"{strain.min():.6e}"),
+        ("Max",       f"{strain.max():.6e}"),
+        ("Std",       f"{strain.std():.6e}"),
+        ("---",       ""),
+        ("NaN count", str(int(np.isnan(strain).sum()))),
+        ("Inf count", str(int(np.isinf(strain).sum()))),
+    ]
+
+    label_w = max(len(k) for k, _ in rows if k != "---")
+    val_w   = max(len(v) for _, v in rows if v != "")
+    inner_w = label_w + val_w + 5  # accounts for border padding and center divider
+
+    top   = f"┌{'─' * inner_w}┐"
+    title = f"│{'HDF5 Strain Dataset':^{inner_w}}│"
+    head  = f"├{'─' * (label_w + 2)}┬{'─' * (val_w + 2)}┤"
+    div   = f"├{'─' * (label_w + 2)}┼{'─' * (val_w + 2)}┤"
+    bot   = f"└{'─' * (label_w + 2)}┴{'─' * (val_w + 2)}┘"
+
+    lines = [top, title, head]
+    for key, val in rows:
+        if key == "---":
+            lines.append(div)
+        else:
+            lines.append(f"│ {key:<{label_w}} │ {val:<{val_w}} │")
+    lines.append(bot)
+
+    logger.info("Loaded HDF5 strain:\n" + "\n".join(lines))
     return strain
 
 def get_strain_data_from_gwpy(
