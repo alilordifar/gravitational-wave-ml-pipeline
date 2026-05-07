@@ -52,6 +52,129 @@
 
 ---
 
+## 🔭 How LIGO's Two Arms Work — The Real Magic
+
+> ❌ The arms don't "cancel out"
+>
+> ✅ They are designed so that one arm **stretches** while the other **compresses** — and we measure the **difference**.
+
+---
+
+### What the Arms Look Like
+
+```
+        Arm X
+         →
+        |
+        |
+Laser → + ← Beam splitter
+        |
+        |
+        ↓
+        Arm Y
+```
+
+Two perpendicular arms at **90°** to each other.
+
+---
+
+### What a Gravitational Wave Does
+
+A passing wave causes the arms to move in **opposite directions**:
+
+```
+Time t1:                 Time t2:
+Arm X → stretches        Arm X → compresses
+Arm Y → compresses       Arm Y → stretches
+```
+
+At the same moment:
+
+```
+Arm X = +ΔL
+Arm Y = -ΔL
+```
+
+---
+
+### What We Measure
+
+$$\text{strain} = \frac{L_x - L_y}{L}$$
+
+We measure the **difference** between the two arms — not the absolute length of either one.
+
+---
+
+### Why This is Powerful
+
+**If both arms changed the same way** (e.g. thermal noise, vibration):
+
+The signal is zero only when both arms change equally; opposite changes produce the signal.
+
+```
+Arm X = +Δ
+Arm Y = +Δ
+
+difference = 0  →  no signal
+```
+
+**But gravitational waves do the opposite:**
+
+```
+Arm X = +Δ
+Arm Y = -Δ
+
+difference = 2Δ  →  signal gets amplified
+```
+
+> The design **doubles** the effect instead of cancelling it.
+
+---
+
+### Tangible Numbers
+
+**With a gravitational wave:**
+
+```
+Arm X = +1
+Arm Y = -1
+
+X - Y = 1 - (-1) = 2  ✅  signal detected
+```
+
+**No wave — arms at rest:**
+
+```
+Arm X = 0
+Arm Y = 0
+
+X - Y = 0  →  nothing
+```
+
+**Noise hitting both arms equally:**
+
+```
+Arm X = +0.5
+Arm Y = +0.5
+
+X - Y = 0  →  noise cancels out  ✅
+```
+
+---
+
+### The Real Magic
+
+| Situation | Arms | Difference | Result |
+|-----------|------|------------|--------|
+| No wave | both `0` | `0` | silence |
+| Common noise | both `+Δ` | `0` | **noise cancels** ✅ |
+| Gravitational wave | `+Δ` and `−Δ` | `2Δ` | **signal amplifies** 🚀 |
+
+> **Final intuition:** the arms don't cancel the signal — they cancel *noise* and enhance the gravitational wave.
+
+> **One-line summary:** one arm stretches while the other compresses, and by subtracting them, LIGO amplifies the signal instead of cancelling it.
+
+---
 ## 📁 HDF5 Data Format
 
 HDF5 is a **container file**, not a flat table. Think of it like a filesystem inside a single file:
