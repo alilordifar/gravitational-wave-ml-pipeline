@@ -1,7 +1,8 @@
 import numpy as np
 import logging
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, welch
 from gwpy.timeseries import TimeSeries
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,9 @@ def segment_signal(signal, window_size, sample_rate):
             segments.append(signal[start:end])
     
     return np.array(segments)
+
+def fourier_transform(signal, fs):
+    
 
 def bandpass_filter(signal, lowcut, highcut, fs, order=4):
     nyquist = 0.5 * fs

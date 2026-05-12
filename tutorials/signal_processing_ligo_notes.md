@@ -38,6 +38,7 @@
 - [Overall DSP Pipeline](#30-overall-dsp-pipeline)
 - [Core Intuitions Summary](#31-most-important-core-intuitions)
 - [Whitening](#32-whitening)
+- [Welch Method — Reliable PSD Estimation](#33-welch-method--reliable-psd-estimation)
 
 ---
 
@@ -492,6 +493,7 @@ Magnitude Spectrum
     │
     ▼
 PSD (Power Spectral Density)
+    │  ← estimated reliably using Welch Method
     │
     ▼
 Spectrogram / STFT
@@ -516,6 +518,7 @@ Whitening
 | 🖼️ **Spectrogram** | Track how frequency content evolves over time |
 | 🎛️ **Filtering** | Allow only selected frequencies to survive |
 | ⚖️ **Whitening** | Normalize each frequency by its noise level — balance the spectrum |
+| 🪟 **Welch Method** | Average many PSD estimates across windows for a stable, reliable PSD |
 
 ---
 
@@ -589,6 +592,7 @@ So to normalize amplitudes, we divide by $\sqrt{\text{PSD}}$, not PSD itself. Th
 
 ### Core formula
 
+$$X_{\text{white}}(f) = \frac{X(f)}{\sqrt{\text{PSD}(f)}}$$
 
 | Part | Meaning |
 |------|---------|
@@ -624,6 +628,167 @@ After whitening:
 | **Whitening** | Rescales frequencies by noise level — soft normalization |
 
 > These are very different operations. Filtering **discards**. Whitening **rebalances**.
+
+---
+
+## 33. Welch Method — Reliable PSD Estimation
+
+> **Welch** is a real DSP/statistical method for estimating the PSD more reliably — not just a Python library function. `scipy.signal.welch()` is simply Python's implementation of it.
+
+---
+
+### Why not just one FFT?
+
+If you compute PSD from a single FFT over the whole signal:
+
+```python
+psd = np.abs(np.fft.rfft(signal))**2
+```
+
+**Problem:** one estimate can be noisy and unstable — random fluctuations mean one window may not represent the true noise statistics well. This matters especially in LIGO, ECG, EEG, audio, and radar.
+
+---
+
+### Core Welch intuition
+
+> *"Don't trust one FFT estimate. Average many instead."*
+
+| Step | What happens |
+|------|-------------|
+| 1 | Split signal into smaller overlapping windows |
+| 2 | Run FFT on each window |
+| 3 | Compute PSD for each window |
+| 4 | **Average all PSDs together** |
+
+**Result:** smoother, more stable, lower-variance PSD estimate.
+
+---
+
+### 🌡️ Analogy
+
+> To estimate the average temperature of a city, measuring once gives a poor estimate. Measuring many times and averaging gives a reliable answer. Welch does exactly this for PSD.
+
+---
+
+### What does "one FFT" actually mean?
+
+This is important. "One FFT" means one transformation applied to one window — producing an **array** of Fourier coefficients, one per frequency bin:
+
+```python
+fft_result = np.fft.rfft(signal)
+# → [X[0], X[1], X[2], X[3], ...]
+#     one coefficient per frequency bin
+```
+
+For **each** frequency bin, Fourier traverses through **all** samples in that window to test whether that frequency is present.
+
+| Thing | Meaning |
+|-------|---------|
+| One FFT | One transformation operation on one window |
+| FFT output | Array of Fourier coefficients `X[k]` |
+
+---
+
+### FFT → Magnitude → PSD
+
+$$|X[k]| = \sqrt{\text{Re}(X[k])^2 + \text{Im}(X[k])^2}$$
+
+$$\text{PSD}[k] \propto |X[k]|^2$$
+
+| Step | Gives you |
+|------|-----------|
+| FFT magnitude | Frequency strength (amplitude) |
+| Magnitude² | Frequency power/energy (PSD) |
+
+> ⚡ Power is squared amplitude — it grows quadratically.
+
+---
+
+### Welch windowing pipeline
+
+Suppose original signal has 4096 samples with `nperseg=512`:
+
+```
+Original signal (4096 samples)
+      │
+      ├─ window 1 → samples   0–511  → FFT → PSD₁
+      ├─ window 2 → samples 256–767  → FFT → PSD₂
+      ├─ window 3 → samples 512–1023 → FFT → PSD₃
+      ├─ ...
+      │
+      ▼
+  Average PSD₁, PSD₂, PSD₃ ...
+      │
+      ▼
+  Stable PSD estimate ✅
+```
+
+> ⚠️ **Important:** `N` in the Welch FFT formula refers to samples **per window** (`nperseg`), not the total signal length.
+
+---
+
+### Welch math
+
+**FFT for window** $i$:
+
+$$X_i[k] = \sum_{n=0}^{N-1} x_i[n] \cdot e^{-j2\pi kn/N}$$
+
+**PSD for window** $i$:
+
+$$P_i[k] = \frac{1}{N} |X_i[k]|^2$$
+
+**Final Welch average:**
+
+$$P_{\text{Welch}}[k] = \frac{1}{M} \sum_{i=1}^{M} P_i[k]$$
+
+| Symbol | Meaning |
+|--------|---------|
+| $M$ | Number of windows |
+| $N$ | Samples per window (`nperseg`) |
+| $P_i[k]$ | PSD estimate of window $i$ at bin $k$ |
+
+---
+
+### When to use Welch
+
+| Goal | Use Welch? |
+|------|-----------|
+| Stable PSD estimate | ✅ Yes |
+| Noise characterization | ✅ Yes |
+| Whitening input | ✅ Yes |
+| LIGO preprocessing | ✅ Yes |
+| Filtering analysis | ✅ Yes |
+
+---
+
+### Why averaging helps
+
+One FFT PSD estimate fluctuates randomly across runs:
+
+```
+window 1 → noisy estimate (spiky)
+window 2 → different noisy estimate (spiky)
+window 3 → yet another noisy estimate
+      ↓
+   average
+      ↓
+   smooth, stable PSD ✅
+```
+
+Averaging across windows:
+- ✅ Reduces variance
+- ✅ Smooths the PSD curve
+- ✅ Stabilizes noise estimation for whitening and filtering
+
+---
+
+### Summary — three concepts, one pipeline
+
+| Concept | Question it answers |
+|---------|-------------------|
+| **FFT** | What frequencies exist in *this* window? |
+| **PSD** | How much power does each frequency contain? |
+| **Welch** | How do we estimate PSD *reliably* across many windows? |
 
 ---
 
