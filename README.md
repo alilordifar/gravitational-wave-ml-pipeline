@@ -1,27 +1,24 @@
-# 🔭 LIGO & Signal Processing — Study Notes
+# Gravitational Wave ML Pipeline
 
-## Table of Contents
-
-- [🌌 What is LIGO?](#-what-is-ligo)
-- [📁 HDF5 Data Format](#-hdf5-data-format)
-- [🗂️ Filename Decoder](#️-filename-decoder)
-- [⏱️ Sample Rate & Time Conversion](#️-sample-rate--time-conversion)
-- [📐 Min-Max Normalization](#-min-max-normalization)
-- [📐 Z-score Standardization](#-z-score-standardization)
-- [⚖️ Min-Max vs. Standardization](#️-min-max-vs-standardization)
-- [📊 The Gaussian Rules](#-the-gaussian-rules)
-- [🔍 Deep Intuition — Std & Z-scores](#-deep-intuition--std--z-scores)
+A signal processing and machine learning pipeline for LIGO gravitational wave data — from raw strain to analysis-ready features.
 
 ---
 
-## 🌌 What is LIGO?
+## Table of Contents
 
-**LIGO (Laser Interferometer Gravitational-Wave Observatory)** is a large-scale physics experiment designed to detect **gravitational waves** — tiny ripples in spacetime first predicted by Albert Einstein in 1916.
+- [Background](#background)
+- [LIGO Detectors](#ligo-detectors)
+- [Data Source](#data-source)
+- [Project Structure](#project-structure)
+- [Pipeline Architecture](#pipeline-architecture)
+- [Signal Processing Techniques](#signal-processing-techniques)
+- [Setup](#setup)
 
-- Uses **laser interferometry** to measure distance changes smaller than 1/10,000 the size of a proton
-- Detects waves from events like black hole mergers and neutron star collisions
+---
 
-### Brief History
+## Background
+
+Gravitational waves are ripples in spacetime caused by accelerating massive objects — predicted by Einstein in 1916 and first directly detected in 2015. The biggest sources are merging black holes, neutron stars, and supernovae.
 
 | Year | Event |
 |------|-------|
@@ -31,460 +28,141 @@
 | 2015 | First detection — **GW150914** |
 | 2017 | Nobel Prize awarded |
 
-### The Two Detectors
-
-| Detector | Location | Notes |
-|----------|----------|-------|
-| **H1** | Hanford, Washington | Relatively stable — less environmental noise |
-| **L1** | Livingston, Louisiana | More seismic and environmental noise |
-
-**Structure (both sites):**
-- Two **perpendicular arms (4 km each)**
-- Laser beams travel inside vacuum tubes
-- A gravitational wave causes a tiny stretch/compression → detected as a signal
-
-**Why two detectors?**
-- Confirm signals are **real** (not noise)
-- Measure the **time delay between sites**
-- Help **locate the source** in the sky
-
-> **One-line summary:** LIGO = two 4 km laser interferometers measuring tiny spacetime distortions from cosmic events.
-
 ---
 
-## 🔭 How LIGO's Two Arms Work — The Real Magic
+## LIGO Detectors
 
-> ❌ The arms don't "cancel out"
->
-> ✅ They are designed so that one arm **stretches** while the other **compresses** — and we measure the **difference**.
+**LIGO (Laser Interferometer Gravitational-Wave Observatory)** uses laser interferometry to measure spacetime distortions smaller than 1/1,000th the diameter of a proton.
 
----
+### Global Network
 
-### What the Arms Look Like
+| Detector | Location | Operator |
+|----------|----------|----------|
+| LIGO H1 | Hanford, Washington | Caltech / MIT |
+| LIGO L1 | Livingston, Louisiana | Caltech / MIT |
+| Virgo | Cascina, Italy | EGO (European) |
+| KAGRA | Kamioka, Japan | ICRR Japan |
 
-```
-        Arm X
-         →
-        |
-        |
-Laser → + ← Beam splitter
-        |
-        |
-        ↓
-        Arm Y
-```
+Multiple detectors are essential for confirming real signals and triangulating sky position.
 
-Two perpendicular arms at **90°** to each other.
+### How the Arms Work
 
----
+Each LIGO site has two perpendicular 4 km arms. A gravitational wave stretches one arm while compressing the other — the detector measures the **difference**:
 
-### What a Gravitational Wave Does
-
-A passing wave causes the arms to move in **opposite directions**:
-
-```
-Time t1:                 Time t2:
-Arm X → stretches        Arm X → compresses
-Arm Y → compresses       Arm Y → stretches
-```
-
-At the same moment:
-
-```
-Arm X = +ΔL
-Arm Y = -ΔL
-```
-
----
-
-### What We Measure
+<img src="images/LIGO.png" alt="LIGO interferometer arms diagram" width="300"/>
 
 $$\text{strain} = \frac{L_x - L_y}{L}$$
-
-We measure the **difference** between the two arms — not the absolute length of either one.
-
----
-
-### Why This is Powerful
-
-**If both arms changed the same way** (e.g. thermal noise, vibration):
-
-The signal is zero only when both arms change equally; opposite changes produce the signal.
-
-```
-Arm X = +Δ
-Arm Y = +Δ
-
-difference = 0  →  no signal
-```
-
-**But gravitational waves do the opposite:**
-
-```
-Arm X = +Δ
-Arm Y = -Δ
-
-difference = 2Δ  →  signal gets amplified
-```
-
-> The design **doubles** the effect instead of cancelling it.
-
----
-
-### Tangible Numbers
-
-**With a gravitational wave:**
-
-```
-Arm X = +1
-Arm Y = -1
-
-X - Y = 1 - (-1) = 2  ✅  signal detected
-```
-
-**No wave — arms at rest:**
-
-```
-Arm X = 0
-Arm Y = 0
-
-X - Y = 0  →  nothing
-```
-
-**Noise hitting both arms equally:**
-
-```
-Arm X = +0.5
-Arm Y = +0.5
-
-X - Y = 0  →  noise cancels out  ✅
-```
-
----
-
-### The Real Magic
 
 | Situation | Arms | Difference | Result |
 |-----------|------|------------|--------|
 | No wave | both `0` | `0` | silence |
-| Common noise | both `+Δ` | `0` | **noise cancels** ✅ |
-| Gravitational wave | `+Δ` and `−Δ` | `2Δ` | **signal amplifies** 🚀 |
+| Common noise | both `+Δ` | `0` | **noise cancels** |
+| Gravitational wave | `+Δ` and `−Δ` | `2Δ` | **signal amplifies** |
 
-> **Final intuition:** the arms don't cancel the signal — they cancel *noise* and enhance the gravitational wave.
-
-> **One-line summary:** one arm stretches while the other compresses, and by subtracting them, LIGO amplifies the signal instead of cancelling it.
+This differential design doubles the gravitational wave signal while rejecting common-mode noise like thermal vibration.
 
 ---
-## 📁 HDF5 Data Format
 
-HDF5 is a **container file**, not a flat table. Think of it like a filesystem inside a single file:
+## Data Source
 
-| HDF5 Concept | Analogy |
-|--------------|---------|
-| Groups | Folders |
-| Datasets | Files — arrays, numbers |
-| Attributes | Metadata — key–value pairs |
+Data comes from **GWOSC (Gravitational Wave Open Science Center)** — the public portal for LIGO/Virgo/KAGRA strain data.
+
+### Available Science Runs
+
+| Run | Dates | GPS Start | GPS End |
+|-----|-------|-----------|---------|
+| O1 | Sep 2015 – Jan 2016 | 1126051217 | 1137254417 |
+| O2 | Nov 2016 – Aug 2017 | 1164556817 | 1187733618 |
+| O3a | Apr 2019 – Oct 2019 | 1238166018 | 1253977218 |
+| O3b | Nov 2019 – Mar 2020 | 1256655618 | 1269363618 |
+| O4 | May 2023 – ongoing | 1368720018 | ongoing |
+
+Data is only available during active science runs. Gaps between runs are offline periods for detector upgrades.
+
+### Sample Rates
+
+| Rate | Nyquist | Use |
+|------|---------|-----|
+| 4,096 Hz | 2,048 Hz | Standard — sufficient for most GW analysis (signals are 10–2,000 Hz) |
+| 16,384 Hz | 8,192 Hz | Full resolution — larger files, higher-frequency detail |
+
+### File Format
+
+Strain data is stored as **HDF5** — a hierarchical container with the signal, metadata, and quality flags bundled together:
 
 ```
-myfile.hdf5
+H-H1_GWOSC_4KHZ_R1-<GPS_START>-<DURATION>.hdf5
 │
-├── /strain
-│    └── strain           ← 1D array (the signal)
+├── /strain/strain     ← 1D strain time series
+├── /meta/             ← detector, sample rate, GPS start
+└── /quality/          ← data quality flags
+```
+
+---
+
+## Project Structure
+
+```
+gravitational-wave-ml-pipeline/
 │
-├── /meta
-│    ├── detector         ← "H1" or "L1"
-│    ├── sample_rate
-│    └── gps_start_time
+├── data/
+│   ├── raw/           ← original HDF5 files from GWOSC
+│   ├── bronze/        ← ingested, minimally transformed
+│   ├── silver/        ← cleaned and processed
+│   └── gold/          ← analysis-ready features
 │
-└── /quality
-     └── data_flags
-```
-
-### What's Inside
-
-**① Strain** — the main signal
-- A 1D array of length `sample_rate × duration`
-- This is what you plot, filter, and model
-
-**② Metadata**
-- Sample rate, GPS time, detector name, units
-
-**③ Quality flags** *(sometimes)*
-- Marks bad segments, glitches, and missing data
-
-**Why not CSV or Parquet?**
-LIGO data is huge, hierarchical, mixed-type, and needs metadata tightly coupled to the signal — flat formats can't handle that.
-
-> **One-line intuition:** An HDF5 file is a mini data lake — signal + metadata + structure, all in one file.
-
-### File Size Calculation
-
-```python
-N              = len(strain)          # number of samples
-bytes_per_item = strain.itemsize      # e.g. 8 bytes for float64
-total_bytes    = N * bytes_per_item
-size_in_mb     = total_bytes / 1024**2
-```
-
-Memory is measured in powers of 2 because computers use binary:
-`1 KB = 1024 B`, `1 MB = 2²⁰ B`, `1 GB = 2³⁰ B`.
-
----
-
-## 🗂️ Filename Decoder
-
-```
-<Observatory>-<Detector>_<Source>_<SampleRate>_<Release>-<GPS_START>-<DURATION>.hdf5
-```
-
-| Part | Meaning |
-|------|---------|
-| `H` | Hanford observatory |
-| `H1` | Hanford detector (interferometer) |
-| `L` | Livingston observatory |
-| `L1` | Livingston detector (interferometer) |
-| `GWOSC` | Gravitational Wave Open Science Center |
-| `4KHZ` | Sampling rate = **4096 Hz** |
-| `R1` | Data release version |
-| `1264316101` | GPS start time (seconds) |
-| `32` | Duration = **32 seconds** |
-| `.hdf5` | File format |
-
----
-
-## ⏱️ Sample Rate & Time Conversion
-
-LIGO data is a 1D time-series of strain measurements.
-
-- A **sample** is one measurement taken at a specific instant
-- `fs = 4096 Hz` means **4096 samples recorded every second**
-- Time is implicit: `sample_index × (1 / fs)`
-- Duration = `total_samples ÷ sample_rate` → e.g. `131072 ÷ 4096 = 32 s`
-
-> Higher sampling rate = finer time resolution — **not** longer duration.
-
-### Rule 1 — Time → Sample Index (multiply)
-
-$$\text{sample\\_index} = \text{time} \times f_s$$
-
-```
-1 second   →  1  × 4096 = 4096
-10 seconds →  10 × 4096 = 40960
-```
-
-> *"How many samples have occurred by this time?"*
-
-### Rule 2 — Sample Index → Time (divide)
-
-$$\text{time} = \frac{\text{sample\\_index}}{f_s}$$
-
-```
-sample 4096  →  4096 ÷ 4096 = 1.0 second
-sample 2048  →  2048 ÷ 4096 = 0.5 seconds
-```
-
-> *"How many seconds does this many samples represent?"*
-
-### When to Use Each
-
-| Operation | Direction | Rule |
-|-----------|-----------|------|
-| Zoom / slice the signal | time → samples | **Multiply** |
-| Label the x-axis in a plot | samples → time | **Divide** |
-
-### `np.linspace` vs `np.arange`
-
-| | `np.linspace(start, stop, N)` | `np.arange(start, stop, step)` |
-|---|-------------------------------|-------------------------------|
-| **Controls** | Number of points | Step size |
-| **Output** | Exactly N evenly spaced points | As many as step allows |
-| **Example** | `[0.00, 0.33, 0.67, 1.00]` | `[0.00, 0.25, 0.50, 0.75]` |
-
-> **One-line takeaway:** Multiply to go from time to samples. Divide to go from samples to time.
-
----
-
-## 📐 Min-Max Normalization
-
-Converts all values into the range **[0, 1]**. The smallest becomes 0, the largest becomes 1.
-
-### Formula
-
-$$x' = \frac{x - x_{\min}}{x_{\max} - x_{\min}}$$
-
-| Part | What it measures |
-|------|-----------------|
-| $x - x_{\min}$ (numerator) | Distance from the minimum |
-| $x_{\max} - x_{\min}$ (denominator) | Total possible distance — the full range |
-| Result | *"What fraction of the full range have we covered?"* |
-
-### Worked Example
-
-```
-data = [10, 20, 30]
-x_min = 10,   x_max = 30,   range = 20
-```
-
-| Original | Calculation | Normalized |
-|----------|-------------|------------|
-| 10 | (10 − 10) / 20 | **0.0** |
-| 20 | (20 − 10) / 20 | **0.5** ← halfway |
-| 30 | (30 − 10) / 20 | **1.0** |
-
-> ⚠️ **Sensitive to outliers.** A single value like `1000` in `[10, 20, 30, 1000]` stretches the scale — everything else collapses toward `0`.
-
-### Python
-
-```python
-x_min = np.min(strain1)
-x_max = np.max(strain1)
-
-strain_minmax = (strain1 - x_min) / (x_max - x_min)
+├── src/python/
+│   ├── main.py
+│   ├── utils/
+│   │   ├── data_loader.py
+│   │   ├── preprocessing.py
+│   │   └── processing.py
+│   ├── feature_eng/
+│   └── EDA/
+│
+├── notebooks/         ← exploratory and analysis notebooks
+├── tutorials/         ← signal processing reference notes
+├── documents/
+├── outputs/
+└── requirements.txt
 ```
 
 ---
 
-## 📐 Z-score Standardization
+## Pipeline Architecture
 
-Instead of fixing values to a range, standardization asks: *how unusual is this value compared to normal behavior?*
+Data flows through a **medallion (bronze → silver → gold)** architecture:
 
-### Formula
-
-$$z = \frac{x - \mu}{\sigma}$$
-
-| Part | What it measures |
-|------|-----------------|
-| $x - \mu$ (numerator) | How far from average? |
-| $\sigma$ (denominator) | What is a typical movement size? |
-| Result | *"How many normal-sized jumps away from average?"* |
-
-### Worked Example
-
-```
-data = [10, 12, 14]
-μ = 12,   σ ≈ 2
-```
-
-| Original | Calculation | z-score | Meaning |
-|----------|-------------|---------|---------|
-| 10 | (10 − 12) / 2 | **−1** | 1 std dev below mean |
-| 12 | (12 − 12) / 2 | **0** | exactly at the mean |
-| 14 | (14 − 12) / 2 | **+1** | 1 std dev above mean |
-
-### Std is NOT a Maximum
-
-Std is **one normal-sized step** — not a ceiling. Z-scores are unbounded:
-
-```
-z = 1    →  normal
-z = 3    →  unusual
-z = 10   →  very rare
-z = 100  →  extreme outlier
-```
-
-### LIGO Example
-
-```
-Hanford:  μ ≈ 0,   σ ≈ 4.6e-20
-
-x = 5e-20  →  z ≈ 1.09   (normal noise — not unusual)
-x = 2e-19  →  z ≈ 4.35   (worth investigating!)
-```
-
-### Python
-
-```python
-mean = np.mean(strain1)
-std  = np.std(strain1)
-
-strain_standardized = (strain1 - mean) / std
-```
+| Layer | Contents | Transformations |
+|-------|----------|-----------------|
+| **Raw** | Original HDF5 files | None — immutable source |
+| **Bronze** | Loaded strain arrays | Ingestion, GPS alignment |
+| **Silver** | Cleaned signals | Bandpass filter, whitening, quality checks |
+| **Gold** | Feature arrays | Spectrograms, Welch PSD, normalization |
 
 ---
 
-## ⚖️ Min-Max vs. Standardization
+## Signal Processing Techniques
 
-| | Min-Max | Standardization |
-|---|---------|-----------------|
-| **Formula** | $\dfrac{x - x_{\min}}{x_{\max} - x_{\min}}$ | $\dfrac{x - \mu}{\sigma}$ |
-| **Denominator means** | Full range | One typical jump (σ) |
-| **Output range** | Always `[0, 1]` | Unbounded, centered at 0 |
-| **Has a maximum?** | ✅ Yes — always 1 | ❌ No — unbounded |
-| **Sensitive to outliers?** | ✅ Yes | ❌ Less so |
-| **Core question** | *"Where are we between min and max?"* | *"How unusual is this?"* |
-| **Best for** | Fixed-scale inputs (e.g. neural nets) | Anomaly detection in signals |
-
-> **For LIGO:** standardization wins — we care about detecting unusual values vs. normal noise, not fitting a `[0, 1]` scale.
+| Technique | Purpose |
+|-----------|---------|
+| **Bandpass filter** | Remove low-frequency seismic noise and high-frequency shot noise; keep the 10–2,000 Hz GW band |
+| **Whitening** | Flatten the noise power spectrum so all frequencies are equally weighted |
+| **Fourier transform** | Decompose strain into frequency components |
+| **Spectrogram** | Time-frequency representation for visual and ML feature extraction |
+| **Welch PSD** | Robust power spectral density estimate via averaged periodograms |
+| **Z-score normalization** | Standardize strain amplitude to flag statistically anomalous values |
 
 ---
 
-## 📊 The Gaussian Rules
+## Setup
 
-For a **Normal (Gaussian)** distribution, std tells you the *"typical spread"* of your data.
-
-| Range | Coverage | Plain English |
-|-------|----------|---------------|
-| $\mu \pm 1\sigma$ | **~68%** of values | most values live here |
-| $\mu \pm 2\sigma$ | **~95%** of values | almost all values live here |
-| $\mu \pm 3\sigma$ | **~99.7%** of values | nearly everything lives here |
-
-### Worked Example — `mean = 100`, `std = 5`
-
-```
-1σ range:   100 ± 5   =  [95,  105]   →  ~68%   of values
-2σ range:   100 ± 10  =  [90,  110]   →  ~95%   of values
-3σ range:   100 ± 15  =  [85,  115]   →  ~99.7% of values
+```bash
+git clone <repo-url>
+cd gravitational-wave-ml-pipeline
+pip install -r requirements.txt
 ```
 
-> ⚠️ `100 ± 5` captures **~68%** of values — not 95%, not all of them.
-
-**Key intuitions:**
-- Std = the **"typical jump size"** away from the mean
-- Most data stays within **a few stds** of the mean
-- Values many stds away are **rare and unusual**
-
-> This holds when data is roughly **Gaussian and centered around the mean**.
+Download strain data from [gwosc.org](https://gwosc.org) and place HDF5 files in `data/raw/`.
 
 ---
-
-## 🔍 Deep Intuition — Std & Z-scores
-
-### Why We Divide by σ
-
-$$z = \frac{x - \mu}{\sigma} = \frac{\text{distance from average}}{\text{size of one typical jump}}$$
-
-**Step 1 — subtract the mean:** $x - \mu$
-Centers the data at zero. *"How far is this value from average?"*
-
-**Step 2 — divide by std:** $\frac{x - \mu}{\sigma}$
-*"How large is that distance compared to a typical movement?"*
-
-### Worked Example
-
-```
-mean = 100,   std = 5,   value = 115
-
-distance from mean:  115 - 100 = 15
-typical jump size:   5
-
-z = 15 / 5 = 3  →  3 typical jumps away (unusual)
-```
-
-### Interpreting Z-scores
-
-| z-score | Meaning | Rarity |
-|---------|---------|--------|
-| `0` | Exactly at the mean | Typical |
-| `±1` | One typical jump away | Common (~68%) |
-| `±2` | Two typical jumps away | Less common (~95%) |
-| `±3` | Three typical jumps away | Rare (~99.7%) |
-| `≥ 4` | Far from normal | **Potentially interesting** |
-
-### One-Line Intuitions
-
-```
-Min-Max:          "relative position in the range"
-Standardization:  "how many typical jumps from average"
-```
-
-> For LIGO: a z-score of `4.35` immediately signals *this is unusual* — far more informative than a min-max value of `0.003`.
