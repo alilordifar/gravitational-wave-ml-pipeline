@@ -209,3 +209,5 @@ __marimo__/
 
 *.hdf5
 .DS_Store
+README_outdated.md
+notebooks/notes_draft.ipynb
