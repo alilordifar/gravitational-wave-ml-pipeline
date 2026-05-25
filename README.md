@@ -49,7 +49,7 @@ Multiple detectors are essential for confirming real signals and triangulating s
 
 Each LIGO site has two perpendicular 4 km arms. A gravitational wave stretches one arm while compressing the other — the detector measures the **difference**:
 
-<img src="images/LIGO.png" alt="LIGO interferometer arms diagram" width="300"/>
+<img src="images/ligo_arms.png" alt="LIGO interferometer arms diagram" width="500"/>
 
 $$\text{strain} = \frac{L_x - L_y}{L}$$
 
