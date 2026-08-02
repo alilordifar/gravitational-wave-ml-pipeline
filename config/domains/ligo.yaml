@@ -1,0 +1,20 @@
+domain: ligo
+
+# --- source dataset ---
+detector: H1
+gps_start: 1126259462
+duration_sec: 4096
+sample_rate_hz: 4096
+raw_filename: H1_1126259462_4096.npy
+
+# --- windowing ---
+window_duration_sec: 2
+samples_per_window: 8192   # sample_rate_hz * window_duration_sec
+
+# --- storage ---
+s3_raw_prefix: raw/ligo
+catalog: signal_platform
+schema: ligo
+bronze_table: bronze_windows
+silver_table: silver_windows
+gold_table: gold_features
