@@ -2,7 +2,7 @@ from astropy.time import Time
 from gwpy.timeseries import TimeSeries
 
 from src.connectors.base import SourceConnector, RawSignal
-
+from src.connectors.registry import register
 
 class LigoGwoscConnector(SourceConnector):
     """Fetches LIGO strain data from GWOSC via GWpy."""
