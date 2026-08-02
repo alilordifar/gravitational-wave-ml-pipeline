@@ -2,10 +2,17 @@ from astropy.time import Time
 from gwpy.timeseries import TimeSeries
 
 from src.connectors.base import SourceConnector, RawSignal
-from src.connectors.registry import register
+
 
 class LigoGwoscConnector(SourceConnector):
     """Fetches LIGO strain data from GWOSC via GWpy."""
+
+    def compute_start_time_utc(self, config: dict) -> float:
+        """Pure GPS -> UTC conversion, no network call."""
+        return Time(config["gps_start"], format="gps").unix
+
+    def get_source_id(self, config: dict) -> str:
+        return config["detector"]
 
     def fetch(self, config: dict) -> RawSignal:
         detector = config["detector"]
@@ -32,7 +39,7 @@ class LigoGwoscConnector(SourceConnector):
             data=ts.value,
             domain="ligo",
             source_id=detector,
-            start_time_utc=Time(gps_start, format="gps").unix,
+            start_time_utc=self.compute_start_time_utc(config),  # same call, no duplication
             sample_rate_hz=sample_rate,
             duration_sec=duration,
             num_samples=len(ts.value),
