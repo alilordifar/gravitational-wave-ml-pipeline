@@ -58,8 +58,14 @@ window_row_schema = ArrayType(StructType([
 
 @udf(returnType=window_row_schema)
 def make_bronze_rows(domain, source_id, start_time_utc, sample_rate_hz, duration_sec, num_samples, extra):
+    import sys
+    sys.path.append("/Workspace/Users/ali.lordifar@gmail.com/gravitational-wave-ml-pipeline")
+    from src.connectors.base import RawSignal
+    from src.utils.s3_paths import compute_asset_key
+    from src.transformation.bronze_builder import build_bronze_rows
+
     raw = RawSignal(
-        data=None,  # Bronze never touches the array — pointers only
+        data=None,
         domain=domain, source_id=source_id, start_time_utc=start_time_utc,
         sample_rate_hz=sample_rate_hz, duration_sec=duration_sec,
         num_samples=num_samples, extra=extra or {},
