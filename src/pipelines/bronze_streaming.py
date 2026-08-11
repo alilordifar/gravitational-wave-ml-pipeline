@@ -75,8 +75,8 @@ def run():
     df_raw = (
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "json")
-        .option("cloudFiles.useNotifications", "true")   # uses your SNS/SQS setup
-        .option("pathGlobFilter", "*.json")               # skip .npy files
+        .option("cloudFiles.useManagedFileEvents", "true")   # ← UC-managed, not useNotifications
+        .option("pathGlobFilter", "*.json")
         .schema(raw_signal_schema)
         .load(RAW_PATH)
     )
