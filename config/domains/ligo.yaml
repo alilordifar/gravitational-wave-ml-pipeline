@@ -2,7 +2,7 @@ domain: ligo
 
 # --- source dataset ---
 detector: H1
-gps_start: 1126259462
+gps_start: 1128678400
 duration_sec: 4096
 sample_rate_hz: 4096
 raw_filename: H1_1126259462_4096.npy
