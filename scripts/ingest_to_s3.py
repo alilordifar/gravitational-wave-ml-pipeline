@@ -25,6 +25,23 @@ def load_platform_config() -> dict:
         return yaml.safe_load(f)
 
 
+def build_event_configs(domain_config: dict) -> list[dict]:
+    """
+    Expands a domain config into one flat config dict per event.
+
+    Configs without an "events" key are treated as a single implicit event
+    (backward-compatible with the old flat schema). When "events" is present,
+    each entry is merged over the shared top-level fields, so connectors keep
+    seeing one flat config dict regardless of which schema was used.
+    """
+    events = domain_config.get("events")
+    if not events:
+        return [domain_config]
+
+    shared = {k: v for k, v in domain_config.items() if k != "events"}
+    return [{**shared, **event} for event in events]
+
+
 def ingest(domain: str, config: dict, uploader: S3Uploader) -> None:
     connector = get_connector(domain)
 
@@ -63,7 +80,8 @@ def main():
         client=boto3.client("s3", region_name=platform_config["region"]),
     )
 
-    ingest(args.domain, domain_config, uploader)
+    for event_config in build_event_configs(domain_config):
+        ingest(args.domain, event_config, uploader)
 
 
 if __name__ == "__main__":

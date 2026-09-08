@@ -1,17 +1,38 @@
 domain: ligo
 
-# --- source dataset ---
 detector: H1
-gps_start: 1128678400
-duration_sec: 4096
 sample_rate_hz: 4096
-raw_filename: H1_1126259462_4096.npy
+duration_sec: 4096
 
-# --- windowing ---
+events:
+  # already in S3 — not listed here:
+  # GW150914 (event_date=2015-09-14)
+  # GW151012 (event_date=2015-10-12)
+
+  - name: GW151226
+    gps_event: 1135136350.6
+    gps_start: 1135134302
+    raw_filename: H1_1135134302_4096.npy
+  - name: GW170104
+    gps_event: 1167559936.6
+    gps_start: 1167557888
+    raw_filename: H1_1167557888_4096.npy
+  - name: GW170608
+    gps_event: 1180922494.49
+    gps_start: 1180920446
+    raw_filename: H1_1180920446_4096.npy
+  - name: GW170814
+    gps_event: 1186741861.5
+    gps_start: 1186739813
+    raw_filename: H1_1186739813_4096.npy
+  - name: GW170817
+    gps_event: 1187008882.43
+    gps_start: 1187006834
+    raw_filename: H1_1187006834_4096.npy
+
 window_duration_sec: 2
-samples_per_window: 8192   # sample_rate_hz * window_duration_sec
+samples_per_window: 8192
 
-# --- storage ---
 s3_raw_prefix: raw/ligo
 catalog: signal_platform
 schema: ligo
