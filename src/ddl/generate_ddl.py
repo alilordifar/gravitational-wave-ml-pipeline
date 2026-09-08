@@ -17,6 +17,7 @@ Usage (design-time, deliberate step — not auto-triggered on yaml save):
 from pathlib import Path
 
 TEMPLATE_PATH = Path(__file__).parent / "bronze_template.sql"
+SILVER_TEMPLATE_PATH = Path(__file__).parent / "silver_template.sql"
 
 
 def generate_ddl(domain: str, bucket: str, template_path: Path = TEMPLATE_PATH) -> str:

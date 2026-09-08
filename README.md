@@ -55,10 +55,28 @@ varies between LIGO and any future domain is what's inside a single
                                                                                 ▼
                                               signal_platform.<domain>.bronze  (Delta table,
                                               schema from src/ddl/bronze_template.sql)
+                                                                                │
+                                              ┌─────────────────────────────────┘
+                                              ▼
+                                 ┌─────────────────────────┐
+                                 │  silver_batch.py           │  (per-asset S3 download,
+                                 │  groupBy(asset_key)        │   once per asset either way)
+                                 │  .applyInPandas(...)       │
+                                 └────────────┬─────────────┘
+                                              ▼
+                                 ┌─────────────────────────┐        ┌──────────────────────┐
+                                 │  quality_checks.py         │──────▶│  silver_builder.py     │
+                                 │  (NaN/Inf/flatline flags)  │       │  (merge quality flags  │
+                                 └─────────────────────────┘       │  + filtered samples)   │
+                                 ┌─────────────────────────┐        └───────────┬───────────┘
+                                 │  processors/ligo_bandpass  │────────────────▲
+                                 │  (per-domain, via registry)│
+                                 └─────────────────────────┘
+                                                                                ▼
+                                              signal_platform.<domain>.silver  (Delta table,
+                                              schema from src/ddl/silver_template.sql)
                                                                                 ▼
                                           ── not yet implemented ──
-                                          Silver (cleaned/validated, e.g. quality_checks.py,
-                                          processors/ligo_bandpass.py)
                                           Gold (ML-ready features, e.g. feature_engineering/)
 ```
 
@@ -75,8 +93,8 @@ and [`src/transformation/bronze_builder.py`](src/transformation/bronze_builder.m
 | **Infra setup** | done | [`scripts/setup_s3.py`](scripts/setup_s3.md) → [`src/utils/aws_setup.py`](src/utils/aws_setup.md) |
 | **Connectors** | done (LIGO only) | [`src/connectors/`](src/connectors/base.md) |
 | **Ingestion / S3 persistence** | done | [`src/ingestion/uploader.py`](src/ingestion/uploader.md), [`src/utils/s3_paths.py`](src/utils/s3_paths.md), [`scripts/ingest_to_s3.py`](scripts/ingest_to_s3.md) |
-| **Bronze (DDL + row-building)** | done | [`src/ddl/`](src/ddl/generate_ddl.md), [`src/transformation/windower.py`](src/transformation/windower.md), [`src/transformation/bronze_builder.py`](src/transformation/bronze_builder.md), [`src/transformation/s3_reader.py`](src/transformation/s3_reader.md) |
-| **Silver (quality/cleaning)** | **stub, empty** | [`src/transformation/quality_checks.py`](src/transformation/quality_checks.md), [`src/transformation/processors/ligo_bandpass.py`](src/transformation/processors/ligo_bandpass.md) |
+| **Bronze (DDL + row-building)** | done | [`src/ddl/`](src/ddl/generate_ddl.md), [`src/transformation/windower.py`](src/transformation/windower.md), [`src/transformation/bronze_builder.py`](src/transformation/bronze_builder.md), [`src/transformation/s3_reader.py`](src/transformation/s3_reader.md), [`src/pipelines/bronze_streaming.py`](src/pipelines/bronze_streaming.md) |
+| **Silver (quality/cleaning)** | done (LIGO only) | [`src/transformation/quality_checks.py`](src/transformation/quality_checks.md), [`src/transformation/processors/ligo_bandpass.py`](src/transformation/processors/ligo_bandpass.md), [`src/transformation/processors/registry.py`](src/transformation/processors/registry.md), [`src/transformation/silver_builder.py`](src/transformation/silver_builder.md), [`src/ddl/silver_template.sql`](src/ddl/silver_template.md), [`src/pipelines/silver_batch.py`](src/pipelines/silver_batch.md) |
 | **Gold (feature engineering)** | **stub, empty** | [`src/feature_engineering/ligo_features.py`](src/feature_engineering/ligo_features.md), [`src/feature_engineering/registry.py`](src/feature_engineering/registry.md) |
 | **Notebooks** | present, not documented here | `notebooks/00_run_pipeline.ipynb` → `04_train.ipynb` walk the stages interactively |
 
@@ -106,7 +124,12 @@ explicitly marked as inference, not a description of real behavior.
   deliberately separate function to actually execute it.
 - [`provision_domain.py`](src/ddl/provision_domain.md) — the notebook-facing
   entry point that reads a domain's YAML and calls `CREATE TABLE IF NOT
-  EXISTS` for it. Meant to be called from a Databricks notebook, not the CLI.
+  EXISTS` for it, for either layer (`layer="bronze"` or `"silver"`). Meant
+  to be called from a Databricks notebook, not the CLI.
+- [`silver_template.sql`](src/ddl/silver_template.md) — the Silver
+  counterpart to `bronze_template.sql`: every Bronze column, plus five
+  quality-flag columns and one `ARRAY<DOUBLE>` column holding each
+  window's filtered samples.
 
 ### `src/utils/` — shared, domain-agnostic infrastructure code
 
@@ -131,10 +154,33 @@ explicitly marked as inference, not a description of real behavior.
 - [`bronze_builder.py`](src/transformation/bronze_builder.md) — merges
   window-level fields with asset-level identity into full Bronze rows,
   ready for `spark.createDataFrame(...)`.
-- [`quality_checks.py`](src/transformation/quality_checks.md) *(stub)* and
-  [`processors/ligo_bandpass.py`](src/transformation/processors/ligo_bandpass.md)
-  *(stub)* — where Silver-layer scientific validation and signal cleaning
-  presumably belong.
+- [`quality_checks.py`](src/transformation/quality_checks.md) — pure,
+  domain-agnostic structural checks on one window's raw samples (NaN, Inf,
+  flatline, all-zero), returning the flags Silver uses to decide whether a
+  window is worth filtering.
+- [`processors/ligo_bandpass.py`](src/transformation/processors/ligo_bandpass.md) —
+  LIGO's Silver-layer signal cleaning: a zero-phase Butterworth bandpass
+  filter (20 Hz-2000 Hz by default).
+- [`processors/registry.py`](src/transformation/processors/registry.md) —
+  `domain string → processor function` lookup, mirroring
+  `src/connectors/registry.py`.
+- [`silver_builder.py`](src/transformation/silver_builder.md) — the
+  Silver-layer counterpart to `bronze_builder.py`: given one asset's
+  Bronze rows plus its raw array, slices out each window, quality-checks
+  it, and bandpass-filters it if it passes.
+
+### `src/pipelines/` — the Spark orchestration layer (S3 + Delta I/O)
+
+- [`bronze_streaming.py`](src/pipelines/bronze_streaming.md) — Auto
+  Loader-driven: reacts to new `.json` sidecars landing in S3, expands
+  each into its window-level Bronze rows, writes to
+  `signal_platform.<domain>.bronze`.
+- [`silver_batch.py`](src/pipelines/silver_batch.md) — reads whatever's
+  new in a domain's Bronze table, groups by `asset_key` so each raw
+  `.npy` is downloaded from S3 exactly once, runs `silver_builder.py` per
+  asset, and appends to `signal_platform.<domain>.silver`. A plain
+  idempotent batch job (left-anti join on `asset_key`), not a stream —
+  see that file's doc for why.
 
 ### `src/feature_engineering/` — Gold layer (not yet implemented)
 
@@ -172,16 +218,49 @@ asset's already there. See
 [`scripts/ingest_to_s3.py`](scripts/ingest_to_s3.md) for the full
 dedup-then-fetch-then-upload flow.
 
-Provisioning a domain's Bronze table currently has to happen from a
-Databricks notebook (it needs a live `spark` session):
+Provisioning a domain's Bronze or Silver table currently has to happen
+from a Databricks notebook (it needs a live `spark` session):
 
 ```python
 from src.ddl.provision_domain import provision_domain
-provision_domain(spark, "config/domains/ligo.yaml")
+provision_domain(spark, "config/domains/ligo.yaml")                  # Bronze
+provision_domain(spark, "config/domains/ligo.yaml", layer="silver")  # Silver
 ```
 
 See [`src/ddl/provision_domain.py`](src/ddl/provision_domain.md) for why
 this deliberately can't be run from the CLI.
+
+Once Bronze has data in it, build Silver by running (also from a
+Databricks notebook, or as a scheduled Databricks Job):
+
+```python
+from src.pipelines.silver_batch import run
+run()
+```
+
+This processes every Bronze asset not already in Silver, quality-checks
+and bandpass-filters each window, and appends the result to
+`signal_platform.ligo.silver`. Safe to re-run — already-processed assets
+are skipped. See [`src/pipelines/silver_batch.py`](src/pipelines/silver_batch.md)
+for the full flow, and the "Testing the Silver layer" section below for
+running it locally first.
+
+### Testing the Silver layer
+
+The pure Python/NumPy pieces (`quality_checks.py`, `processors/ligo_bandpass.py`,
+`silver_builder.py`) need no Spark/AWS and are covered by `tests/`:
+
+```bash
+pip install -r requirements.txt   # now includes scipy, pandas, pytest
+python -m pytest tests/ -v
+```
+
+To exercise the full Spark path locally before pushing to Databricks, use
+`notebooks/silver_local.ipynb` (already scaffolded for a local
+`SparkSession` reading Bronze parquet via `s3a://`) and call
+`src.pipelines.silver_batch.run()` from a cell once `spark` is defined —
+see that notebook and [`src/pipelines/silver_batch.py`](src/pipelines/silver_batch.md)
+for details.
 
 ## Configuration
 
@@ -206,16 +285,27 @@ onboarding a new domain (say, `ecg`) is meant to require only:
    ECG-specific fields (lead, patient ID, ...) packed into `RawSignal.extra`.
 3. Register it: add `"ecg": EcgConnector` to `_REGISTRY` in
    [`src/connectors/registry.py`](src/connectors/registry.md).
-4. Provision its Bronze table via
+4. Provision its Bronze and Silver tables via
    [`provision_domain(spark, "config/domains/ecg.yaml")`](src/ddl/provision_domain.md)
-   — no new DDL to write; it reuses
-   [`bronze_template.sql`](src/ddl/bronze_template.md) as-is.
+   and `provision_domain(spark, "config/domains/ecg.yaml", layer="silver")`
+   — no new DDL to write; both reuse
+   [`bronze_template.sql`](src/ddl/bronze_template.md) /
+   [`silver_template.sql`](src/ddl/silver_template.md) as-is.
 5. Run `python scripts/ingest_to_s3.py --domain ecg`.
+6. Implement an ECG-specific Silver processor (a function
+   `(samples, sample_rate_hz) -> filtered_samples`) and register it as
+   `"ecg"` in
+   [`src/transformation/processors/registry.py`](src/transformation/processors/registry.md)
+   — this is the one Silver-layer step that's genuinely domain-specific,
+   the same way the connector is on the ingestion side.
+7. Run `src.pipelines.silver_batch.run()` (with `DOMAIN = "ecg"`) to build
+   Silver.
 
 No changes to `s3_paths.py`, `windower.py`, `bronze_builder.py`,
-`uploader.py`, `s3_reader.py`, or the Bronze DDL template should be
-necessary — that's the whole point of routing domain-specific data through
-`RawSignal.extra` → `domain_metadata`.
+`uploader.py`, `s3_reader.py`, `quality_checks.py`, `silver_builder.py`,
+or either DDL template should be necessary — that's the whole point of
+routing domain-specific data through `RawSignal.extra` → `domain_metadata`,
+and domain-specific *processing* through `processors/registry.py`.
 
 ## Repository layout
 
@@ -227,13 +317,15 @@ necessary — that's the whole point of routing domain-specific data through
 ├── scripts/                     # CLI entry points (see docs above)
 ├── src/
 │   ├── connectors/               # per-domain fetch logic + registry
-│   ├── ddl/                      # Bronze schema template + generation/provisioning
+│   ├── ddl/                      # Bronze + Silver schema templates + generation/provisioning
 │   ├── ingestion/                 # S3 write path
 │   ├── transformation/            # window computation, Bronze row building, S3 read path,
-│   │                               # and stubs for Silver-layer quality checks / processors
+│   │                               # Silver quality checks + silver_builder.py, and
+│   │                               # processors/ (per-domain Silver filtering + registry)
+│   ├── pipelines/                 # Spark orchestration: bronze_streaming.py, silver_batch.py
 │   ├── feature_engineering/       # Gold-layer stubs
 │   └── utils/                     # S3 path construction, bucket hardening
 ├── notebooks/                    # interactive walkthroughs of each pipeline stage
 ├── data/local_cache/              # local scratch space (not part of the S3-only persistence design)
-└── tests/                        # currently empty
+└── tests/                        # unit tests for the pure Silver-layer functions
 ```
