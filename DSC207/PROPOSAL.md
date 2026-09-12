@@ -32,23 +32,53 @@ Three pairs were considered:
 - **O3a vs. O4a (chosen)** — corresponds to one well-documented upgrade
   cycle: increased circulating laser power and a transition from
   frequency-independent to frequency-dependent squeezed-light injection. A
-  real, specific, citable hardware change with a known noise-shape impact
-  — the cleanest single-cause test available among LIGO's public run pairs.
+  real, specific, citable hardware change with a known noise-shape impact.
+  This is a well-motivated run-to-run shift, not a proof that the upgrade is
+  the only difference between the two data populations.
 
 ## Data, methods, and model
 
 - **Data:** GWOSC public H1 strain releases. 8 quality-vetted, event-free,
   1024-second noise segments per run (O3a, O4a), selected and DQ-vetted per
   `TUTORIAL.md` Stage 2.
-- **Signal model:** simulated BBH injections, `IMRPhenomD` waveforms,
-  Bilby's default prior (component masses Uniform(5,100) M☉, aligned spins
-  Uniform(0,0.8), distance uniform-in-comoving-volume over [100,2000] Mpc),
+- **Signal model:** simulated BBH injections, `IMRPhenomD` waveforms, and a
+  project-defined prior based on Bilby conventions (component masses
+  Uniform(5,100) solar masses, aligned spins Uniform(0,0.8), distance
+  uniform-in-comoving-volume over [100,2000] Mpc),
   matched-filter SNR ≥ 8, 800 accepted injections per run.
 - **Inference model:** `sbi`'s SNPE with a Masked Autoregressive Flow (MAF)
   density estimator — single simulation round, trained on 750 O3a
   injections (50 held out for the baseline SBC test).
 - **Evaluation:** Simulation-Based Calibration, KS-test against uniform
   rank statistics (`TUTORIAL.md` Stage 6).
+
+### What the model actually sees and produces
+
+Each injection is converted into one fixed-length, 4-second H1 strain window
+(16,384 samples at 4096 Hz) centered on the simulated merger. The window is
+whitened using the corresponding noise PSD and bandpassed to 35-350 Hz. The
+model input is therefore a numerical waveform array, not an image and not a
+handwritten list of summary statistics.
+
+The matching target is a four-number vector:
+
+```text
+[chirp mass, mass ratio, effective spin, luminosity distance]
+```
+
+After training, the model does not return only four point predictions. Given
+one new waveform, it generates many four-number samples from an estimated
+posterior distribution, `p(parameters | waveform)`. Those samples can be
+summarized as medians and credible intervals, while retaining correlations
+between parameters. The project evaluates whether this probability
+distribution is calibrated, not merely whether its median is accurate.
+
+The 750 training examples are O3a waveform/known-parameter pairs. The model
+is then evaluated on 50 held-out O3a injections and 800 O4a injections. The
+O4a examples never train the model. Because the current implementation splits
+injections after generating them from a small set of noise segments, the O3a
+baseline should be described as a test on held-out injections under the same
+run's noise conditions, not as a fully independent detector-noise test.
 
 ## Target parameters, and why 3 are excluded
 
@@ -101,7 +131,11 @@ agreement or disagreement with the SBC finding below would mean. The
 thresholds used (`psd_drift_ks_alpha`, `psd_drift_relative_threshold` in
 `config.py`) are illustrative defaults for this demonstration, **not
 values tuned or validated against known-good/known-drifted noise pairs** —
-a real monitoring pipeline would need that calibration work first.
+a real monitoring pipeline would need that calibration work first. In
+particular, the KS calculation treats frequency-bin ASD values as empirical
+samples even though neighboring frequency bins are correlated, so its
+p-value is a heuristic monitoring score, not a formally calibrated
+independent-sample hypothesis test.
 
 ## Finding: no strong evidence of calibration degradation, with a caveat
 
@@ -132,12 +166,14 @@ contribution here than the specific direction of the result.
 
 Distance calibration is the worst of the 4 parameters on *both* O3a and
 O4a — consistently, not just on the cross-run test. Because this shows up
-identically on the training-distribution baseline, it points to a
-**structural limitation of single-detector parameter estimation** (the
+identically on the training-distribution baseline, it is **consistent with a
+structural limitation of single-detector parameter estimation** (the
 well-known distance/inclination degeneracy — with inclination excluded
-from this single-detector target set, its correlation with distance likely
-shows up as extra posterior width/miscalibration on distance itself) rather
-than anything introduced by the O3a→O4a noise shift specifically.
+from this single-detector target set, its correlation with distance may show
+up as extra posterior width or miscalibration on distance itself) rather
+than clearly attributable to the O3a→O4a noise shift. This experiment does
+not isolate that mechanism from prior choice, waveform assumptions, or the
+small calibration sample.
 
 ## Open, unresolved anomaly
 
@@ -145,8 +181,10 @@ A small number of held-out examples (3 of 800, in the original run this
 pipeline is based on) show pathological posterior-sampling collapse —
 near-zero rejection-sampling acceptance — and are excluded from the
 calibration statistics (tracked explicitly via `failed_indices`, never
-silently zero-filled; see `TUTORIAL.md` Stage 6). Two candidate
-explanations were tested and **both ruled out**: the failures are not
+silently zero-filled; see `TUTORIAL.md` Stage 6). These are failures of the
+posterior sampling procedure, not by themselves proof that the learned
+posterior is wrong; the effective SBC sample size must be reported after
+their exclusion. Two candidate explanations were tested and **both ruled out**: the failures are not
 concentrated in a rare corner of the training prior (~9% of O3a training
 examples share the same high-mass/high-spin region as 2 of the 3
 failures — not actually rare), and the noise segment shared by those same
